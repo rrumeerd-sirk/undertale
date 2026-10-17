@@ -10,20 +10,6 @@
     position: relative;
 }
 
-/* very visible moving purple lines behind the battle box */
-.body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 0;
-    background-image:
-        linear-gradient(180deg, rgba(0,0,0,0.86), rgba(8,2,10,0.86)),
-        repeating-linear-gradient(-45deg, rgba(146,39,143,1) 0 28px, rgba(146,39,143,0) 28px 56px);
-    background-blend-mode: normal;
-    opacity: 1;
-    animation: outside-stripes 5s linear infinite;
-}
 
 @keyframes outside-stripes {
     from { background-position: 0 0, 0 0; }
