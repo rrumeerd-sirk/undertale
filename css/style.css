@@ -42,7 +42,6 @@
     content: "";
     position: absolute;
     inset: 0;
-    /* base gradients and moving diagonal stripe layer */
     background-image:
         repeating-linear-gradient(-45deg, rgba(146,39,143,0.06) 0 6px, rgba(255,255,255,0) 6px 12px),
         linear-gradient(180deg, rgba(18,18,38,0.9), rgba(6,6,18,0.95));
@@ -62,7 +61,6 @@
     z-index: 2;
 }
 
-/* animations */
 @keyframes dr-stripes {
     from { background-position: 0 0, center; }
     to   { background-position: 400px 0, center; }
