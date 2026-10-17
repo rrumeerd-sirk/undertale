@@ -7,29 +7,27 @@
     background-color: black;
     font-family: "undertale";
     color: white;
-    /* make body a positioning context for the outside animation */
     position: relative;
 }
 
-/* very visible moving purple lines outside the battle box (covers viewport but sits behind the .zone) */
+/* very visible moving purple lines behind the battle box */
 .body::before {
     content: "";
     position: fixed;
     inset: 0;
     pointer-events: none;
-    z-index: 0; /* behind the zone which will be pushed above */
-    /* strong purple stripes with a darker base so they read well on black */
+    z-index: 0;
     background-image:
-        linear-gradient(180deg, rgba(10,4,20,0.6), rgba(0,0,0,0.6)),
-        repeating-linear-gradient(-45deg, rgba(146,39,143,0.55) 0 14px, rgba(146,39,143,0.0) 14px 34px);
-    background-blend-mode: normal, normal;
+        linear-gradient(180deg, rgba(0,0,0,0.86), rgba(8,2,10,0.86)),
+        repeating-linear-gradient(-45deg, rgba(146,39,143,1) 0 28px, rgba(146,39,143,0) 28px 56px);
+    background-blend-mode: normal;
     opacity: 1;
-    animation: outside-stripes 6s linear infinite;
+    animation: outside-stripes 5s linear infinite;
 }
 
 @keyframes outside-stripes {
     from { background-position: 0 0, 0 0; }
-    to   { background-position: 400px 0, 400px 0; }
+    to   { background-position: 800px 0, 800px 0; }
 }
 
 .flexContainer {
@@ -46,16 +44,15 @@
     margin: 0 2px;
     position: relative;
     overflow: hidden;
-    /* ensure the zone sits above the page-level animated background */
     z-index: 2;
 }
 
-/* remove the dotted/bullet pattern overlay inside the battle box */
+/* remove dots from battle box */
 .zone::before {
     display: none;
 }
 
-/* animated Deltarune-style battle background (kept subtle inside the box) */
+/* animated Deltarune-style battle background */
 .zone::after {
     content: "";
     position: absolute;
@@ -68,11 +65,10 @@
     mix-blend-mode: overlay;
     opacity: 0.9;
     pointer-events: none;
-    z-index: 1; /* sits above the page background but below the content */
+    z-index: 1;
     animation: dr-stripes 9s linear infinite, dr-pulse 6s ease-in-out infinite;
 }
 
-/* ensure content (heart) sits above animated background */
 .heart {
     width: 7vh;
     position: absolute;
