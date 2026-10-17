@@ -1,0 +1,68 @@
+@font-face {
+    font-family: "undertale";
+    src: url("../font/DTM-Mono.otf");
+}
+
+.body {
+    background-color: black;
+    font-family: "undertale";
+    color: white;
+}
+
+.flexContainer {
+    display: flex;
+    justify-content: center;
+    margin-top: 21vh;
+}
+
+.zone {
+    width: 80vh;
+    height: 60vh;
+    background-color: black;
+    border: solid 2px white;
+    margin: 0 2px;
+    position: relative;
+}
+
+.heart {
+    width: 7vh;
+    position: absolute;
+}
+
+.hpContainer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 2vh;
+}
+
+.lv {
+    font-size: 4vh;
+}
+
+.hp {
+    text-transform: uppercase;
+    font-size: 3vh;
+    margin-left: 10vh;
+}
+
+.hpBar[value] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 11vh;
+    height: 4vh;
+    margin-left: 1vh;
+}
+
+.hpBar[value]::-webkit-progress-bar {
+  background-color: red;
+}
+
+.hpBar[value]::-webkit-progress-value {
+  background-color: yellow;
+}
+
+.hpNumber {
+    margin-left: 3vh;
+    font-size: 3.5vh;
+}
