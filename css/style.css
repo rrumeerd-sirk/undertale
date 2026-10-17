@@ -7,6 +7,26 @@
     background-color: black;
     font-family: "undertale";
     color: white;
+    /* make body a positioning context for the outside animation */
+    position: relative;
+}
+
+/* moving purple lines outside the battle box (covers viewport but sits behind the .zone) */
+.body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0; /* behind the zone which will be pushed above */
+    background-image: repeating-linear-gradient(-45deg, rgba(146,39,143,0.12) 0 6px, rgba(0,0,0,0) 6px 12px);
+    opacity: 0.65;
+    mix-blend-mode: screen;
+    animation: outside-stripes 10s linear infinite;
+}
+
+@keyframes outside-stripes {
+    from { background-position: 0 0; }
+    to   { background-position: 400px 0; }
 }
 
 .flexContainer {
@@ -23,6 +43,8 @@
     margin: 0 2px;
     position: relative;
     overflow: hidden;
+    /* ensure the zone sits above the page-level animated background */
+    z-index: 2;
 }
 
 /* subtle dotted/bullet pattern overlay (kept from previous change) */
@@ -34,7 +56,7 @@
     background-size: 14px 14px;
     opacity: 0.18;
     pointer-events: none;
-    z-index: 1;
+    z-index: 3; /* above the zone's internal background */
 }
 
 /* animated Deltarune-style battle background (pure CSS, does not modify HTML) */
@@ -50,7 +72,7 @@
     mix-blend-mode: overlay;
     opacity: 0.9;
     pointer-events: none;
-    z-index: 0;
+    z-index: 1; /* sits above the page background but below the dotted overlay and content */
     animation: dr-stripes 9s linear infinite, dr-pulse 6s ease-in-out infinite;
 }
 
@@ -58,7 +80,7 @@
 .heart {
     width: 7vh;
     position: absolute;
-    z-index: 2;
+    z-index: 4;
 }
 
 @keyframes dr-stripes {
