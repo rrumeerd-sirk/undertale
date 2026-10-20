@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gemene buster</title>
+<style>
+/* gebruik de ut font. anders gwn courier new.  */
+@font-face{font-family:undertale;src:local("Determination Mono"),url("font/DTM-Mono.otf")}
+body{margin:0;background:#000;color:#fff;font-family:undertale,"Courier New",monospace}
+/* Scale the canvas to the window, keep pixels crisp, and stop touch-scrolling while playing */
+canvas{display:block;margin:auto;width:min(100vw,1200px);height:auto;image-rendering:pixelated;touch-action:none}
+</style>
+</head>
+<body>
+<!-- alles in 1 canvas -->
+<canvas id="game"></canvas>
+<button id="bt" type="button"></button>
+<script>
+// =====================
+// config
+// =====================
+// grootes
+const SCALE = 3, SPR_W = 16, SPR_H = 30;     // sprite
+const BASE_W = 400, BASE_H = 200;            // groote loop veld kris
+// gevecht instellingen
+const ZW = 380, ZH = 380, HS = 40, PLEN = 720; // gevecht gebied groote enz
+
+// canvas naar de overworld groote veranderen.
+const canvas = document.getElementById("game");
+canvas.width = BASE_W * SCALE;
+canvas.height = BASE_H * SCALE;
+const ctx = canvas.getContext("2d");
+const ZX = (canvas.width - ZW) / 2, ZY = (canvas.height - ZH) / 2;
+// de font voor alles
+const FONT = "undertale,'Courier New',monospace";
+
+// =====================
+// knoppen -pijlen -wasd -muis?(OSU)
+// =====================
+const keys = {};
+const K = (...n) => n.some(k => keys[k]);
+let ptr = null;
+addEventListener("keydown", e => {
+  const k = e.key.toLowerCase();
+  if (k.startsWith("arrow") || k === " ") e.preventDefault();
+  if (!keys[k]) onPress(k);
+  keys[k] = true;
+});
+
+addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+// buiten focus laat alle knoppen los
+addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
+// muis naar bewegings script
+function pt(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: (e.clientX - r.left) * canvas.width / r.width, y: (e.clientY - r.top) * canvas.height / r.height };
+}
+// muis shit
+canvas.addEventListener("pointerdown", e => ptr = pt(e));
+canvas.addEventListener("pointermove", e => { if (ptr) ptr = pt(e); });
+addEventListener("pointerup", () => ptr = null);
+
+// bewegings richtingen
+function vec(cx, cy) {
+  let dx = (K("arrowright", "d") ? 1 : 0) - (K("arrowleft", "q", "a") ? 1 : 0);
+  let dy = (K("arrowdown", "s") ? 1 : 0) - (K("arrowup", "z", "w") ? 1 : 0);
+  if (!dx && !dy && ptr) {
+    const vx = ptr.x - cx, vy = ptr.y - cy, d = Math.hypot(vx, vy);
+    if (d > 8) { dx = vx / d; dy = vy / d; }
+  }
+  return [dx, dy];
+}
+
+// =====================
+// sprite
+// =====================
+// foto maken en laden
+function load(src) { const img = new Image(); img.src = src; return img; }
+// sprite foto locatie.
+const kris = {
+  down:  [0, 1, 2, 3].map(i => load("kris/down_" + i + ".png")),
+  left:  [0, 1].map(i => load("kris/left_" + i + ".png")),
+  right: [0, 1].map(i => load("kris/right_" + i + ".png")),
+  up:    [0, 1, 2, 3].map(i => load("kris/up_" + i + ".png"))
+};
+// de hart foto.
+const heartImg = load("https://images.steamusercontent.com/ugc/13553940126908806159/86294B190A2EF0E4CAAC95DF3FCD31CF2C2A1D30/?imw=637&imh=358&ima=fit&impolicy=Letterbox&imcolor=%23000000&letterbox=true");
+
+// =====================
+// status
+// =====================
+// animatie status en snelheid
+const player = { x: BASE_W / 2 - SPR_W / 2, y: BASE_H / 2 - SPR_H / 2, speed: 2, dir: "down", frame: 0, timer: 0, moving: false };
+// alle status modussen
+let mode = "world", tr = 0, fr = 0, bt = null;
+const btn = document.getElementById("bt");
+btn.onclick = () => { toggle(); btn.blur(); };
+
+// overworld/battle toggle switch
+function toggle() {
+  if (mode === "world") { mode = "trans"; tr = 0; }
+  else { mode = "world"; ptr = null; }
+  btn.textContent = mode === "world" ? "" : "";
+}
+// hp. geen bullets. alles vers laden
+function startBattle() {
+  mode = "battle";
+  bt = { hx: (ZW - HS) / 2, hy: ZH * 0.65, hp: 20, inv: 0, dead: 0, pat: 0, t: 0, pause: 60, auto: true, bul: [] };
+}
+// pattern switch script
+function setPat(n) { bt.pat = (n + PAT.length) % PAT.length; bt.t = 0; bt.pause = 30; bt.bul = []; }
+// alle knop toggles
+function onPress(k) {
+  if (k === "b") toggle();
+  if (mode !== "battle") return;
+  if (k >= "1" && k <= "7") { bt.auto = false; setPat(+k - 1); }
+  if (k === "n") { bt.auto = false; setPat(bt.pat + 1); }
+  if (k === "0") bt.auto = true;
+}
+
+// =====================
+// bullet patterns 
+// =====================
+// rnd tussen a em b
+const rnd = (a, b) => a + Math.random() * (b - a);
+const orb = (x, y, vx, vy, r = 7) => bt.bul.push({ k: 0, x, y, vx, vy, r });
+const rect = (x, y, w, h, vx, vy) => bt.bul.push({ k: 1, x, y, w, h, vx, vy });
+const beam = (x, y, w, h) => bt.bul.push({ k: 2, x, y, w, h, age: 0 });
+const hcx = () => bt.hx + HS / 2, hcy = () => bt.hy + HS / 2;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const PAT = [
+  // 1 kogel regen
+  { n: "Rain", f: t => { if (t % 6 === 0) orb(rnd(10, ZW - 10), -10, 0, 3 + rnd(0, 1.5) + t / 360); } },
+  // 2 ventilator
+  { n: "Fan", f: t => {
+    if (t % 4 === 0) { const a = Math.PI / 2 + Math.sin(t * .045) * 1.15; orb(ZW / 2, 0, Math.cos(a) * 3, Math.sin(a) * 3, 6); }
+    if (t > 300 && t % 8 === 0) { const a = -Math.PI / 2 + Math.sin(t * .05) * 1.1; orb(ZW / 2, ZH, Math.cos(a) * 3, Math.sin(a) * 3, 6); }
+  } },
+  // 3 flappy bird
+  { n: "Bones", f: t => {
+    if (t % 72 === 20) {
+      const L = (t / 72 | 0) % 2 === 0, gap = 100, gy = rnd(30, ZH - gap - 30), v = (L ? 1 : -1) * (3.2 + t / 360), x = L ? -16 : ZW;
+      rect(x, 0, 16, gy, v, 0); rect(x, gy + gap, 16, ZH - gy - gap, v, 0);
+    }
+  } },
+  // 4 jevil
+  { n: "Aimed", f: t => {
+    if (t % 38 === 0) {
+      const s = Math.random() * 4 | 0, sx = s === 0 ? 0 : s === 1 ? ZW : rnd(0, ZW), sy = s === 2 ? 0 : s === 3 ? ZH : rnd(0, ZH);
+      const a = Math.atan2(hcy() - sy, hcx() - sx);
+      for (const d of [-.22, 0, .22]) orb(sx, sy, Math.cos(a + d) * 3.4, Math.sin(a + d) * 3.4, 7);
+    }
+  } },
+  // 5 asriel thunder
+  { n: "Rude Buster", f: t => {
+    if (t % 105 === 15) {
+      const h = Math.random() < .5, p = (h ? hcy() : hcx()) - 18 + rnd(-30, 30);
+      if (h) beam(0, clamp(p, 0, ZH - 36), ZW, 36); else beam(clamp(p, 0, ZW - 36), 0, 36, ZH);
+    }
+  } },
+  // 6 links rechts ziel beweeg
+  { n: "Curtain", f: t => {
+    if (t % 52 === 0) {
+      const cols = Math.floor(ZW / 28), x0 = (ZW - cols * 28) / 2 + 14;
+      bt.g = clamp((bt.g ?? 5) + Math.round(rnd(-4, 4)), 0, cols - 4);
+      for (let i = 0; i < cols; i++) if (i < bt.g || i >= bt.g + 4) orb(x0 + i * 28, -10, 0, 2.6, 8);
+    }
+  } },
+  // 7 jevil deel 2
+  { n: "Burst", f: t => {
+    if (t % 58 === 0) {
+      const x = rnd(80, ZW - 80), y = rnd(40, 160), o = Math.random() * 6.28;
+      for (let i = 0; i < 16; i++) { const a = o + i * Math.PI / 8; orb(x, y, Math.cos(a) * 2.2, Math.sin(a) * 2.2, 6); }
+    }
+  } }
+];
+
+// raakt kogel hart?
+function hit(b, cx, cy) {
+  if (b.k === 0) return Math.hypot(b.x - cx, b.y - cy) < b.r + 9;
+  if (b.k === 2 && !(b.age >= 40 && b.age < 62)) return false;
+  const nx = clamp(cx, b.x, b.x + b.w), ny = clamp(cy, b.y, b.y + b.h);
+  return Math.hypot(nx - cx, ny - cy) < 9;
+}
+
+// =====================
+// update
+// =====================
+// logica ow
+function updateWorld() {
+  const [dx, dy] = vec((player.x + SPR_W / 2) * SCALE, (player.y + SPR_H / 2) * SCALE);
+  player.moving = !!(dx || dy);
+  player.x = clamp(player.x + dx * player.speed, 0, BASE_W - SPR_W);
+  player.y = clamp(player.y + dy * player.speed, 0, BASE_H - SPR_H);
+  if (dy > 0) player.dir = "down";
+  if (dy < 0) player.dir = "up";
+  if (dx < 0) player.dir = "left";
+  if (dx > 0) player.dir = "right";
+  if (player.moving) {
+    if (++player.timer >= 8) { player.frame++; player.timer = 0; }
+  } else player.frame = 0;
+  player.frame %= kris[player.dir].length;
+}
+// gevechts logica
+function updateBattle() {
+  if (bt.dead > 0) {
+    if (--bt.dead === 0) { bt.hp = 20; bt.bul = []; bt.t = 0; bt.pause = 60; bt.hx = (ZW - HS) / 2; bt.hy = ZH * 0.65; }
+    return;
+  }
+  const [dx, dy] = vec(ZX + hcx(), ZY + hcy());
+  bt.hx = clamp(bt.hx + dx * 4.6, 0, ZW - HS);
+  bt.hy = clamp(bt.hy + dy * 4.6, 0, ZH - HS);
+  if (bt.pause > 0) { if (--bt.pause === 0) bt.bul = []; }
+  else {
+    PAT[bt.pat].f(bt.t);
+    if (++bt.t >= PLEN) { bt.t = 0; bt.pause = 80; if (bt.auto) bt.pat = (bt.pat + 1) % PAT.length; }
+  }
+  if (bt.inv > 0) bt.inv--;
+  for (const b of bt.bul) {
+    b.x += b.vx || 0; b.y += b.vy || 0;
+    if (b.k === 2) b.age++;
+    if (bt.inv <= 0 && hit(b, hcx(), hcy())) {
+      bt.hp -= b.k === 2 ? 6 : b.k === 1 ? 4 : 3; bt.inv = 50;
+      if (bt.hp <= 0) { bt.hp = 0; bt.dead = 100; return; }
+    }
+  }
+  bt.bul = bt.bul.filter(b => b.k === 2 ? b.age < 70 : b.x > -60 - (b.w || 0) && b.x < ZW + 60 && b.y > -60 - (b.h || 0) && b.y < ZH + 60);
+}
+// check ow of bt en verwissel
+function update() {
+  fr++;
+  if (mode === "world") updateWorld();
+  else if (mode === "trans") { if (++tr >= 50) startBattle(); }
+  else updateBattle();
+}
+
+// =====================
+// teken
+// =====================
+// teken de tekst
+function text(s, x, y, size, col, al) {
+  ctx.font = size + "px " + FONT; ctx.fillStyle = col || "#fff"; ctx.textAlign = al || "left"; ctx.textBaseline = "top"; ctx.fillText(s, x, y);
+}
+// teken kris of een placeholder
+function drawKris() {
+  const imgs = kris[player.dir], img = imgs[player.frame % imgs.length];
+  const x = Math.floor(player.x * SCALE), y = Math.floor(player.y * SCALE), w = SPR_W * SCALE, h = SPR_H * SCALE;
+  if (img && img.complete && img.naturalWidth) { ctx.drawImage(img, x, y, w, h); return; }
+  const s = SCALE; // kris placeholder
+  ctx.fillStyle = "#FF0000"; // rood kleur
+  ctx.fillRect(x, y, 16 * s, 16 * s); // vierkant blok
+}
+
+// frame ow
+function drawWorld() {
+  ctx.fillStyle = "#111"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.imageSmoothingEnabled = false;
+  drawKris();
+  text("", 12, canvas.height - 28, 18, "#666");
+}
+// blauwe kogels
+function drawSquare(x, y, s) {
+  ctx.fillStyle = "#ffffff"; ctx.fillRect(x - s, y - s, s * 2, s * 2);
+  ctx.fillStyle = "#ffffff"; ctx.fillRect(x - s * .45, y - s * .45, s * .9, s * .9);
+}
+// teken alle kogels
+function drawBullets() {
+  for (const b of bt.bul) {
+    if (b.k === 0) drawSquare(b.x, b.y, b.r * 1.3);
+    else if (b.k === 1) { ctx.fillStyle = "#fff"; ctx.fillRect(b.x, b.y, b.w, b.h); ctx.fillStyle = "#cfcfcf"; ctx.fillRect(b.x + 4, b.y, b.w - 8, b.h); }
+    else if (b.age < 40) {
+      ctx.fillStyle = b.age % 8 < 4 ? "rgba(255,60,172,.9)" : "rgba(255,255,255,.7)";
+      if (b.w > b.h) ctx.fillRect(b.x, b.y + b.h / 2 - 2, b.w, 4); else ctx.fillRect(b.x + b.w / 2 - 2, b.y, 4, b.h);
+    } else {
+      ctx.globalAlpha = Math.min(1, (62 - b.age) / 12); ctx.fillStyle = "#ff3cac"; ctx.fillRect(b.x, b.y, b.w, b.h);
+      ctx.fillStyle = "#fff"; if (b.w > b.h) ctx.fillRect(b.x, b.y + 10, b.w, b.h - 20); else ctx.fillRect(b.x + 10, b.y, b.w - 20, b.h);
+      ctx.globalAlpha = 1;
+    }
+  }
+}
+// bt frame
+function drawBattle() {
+  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.save(); ctx.translate(ZX, ZY);
+  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, ZW, ZH);
+  ctx.save(); ctx.beginPath(); ctx.rect(0, 0, ZW, ZH); ctx.clip();
+  drawBullets();
+  if (bt.dead === 0 && (bt.inv <= 0 || (bt.inv >> 2) % 2 === 0)) ctx.drawImage(heartImg, bt.hx, bt.hy, HS, HS);
+  ctx.restore();
+  ctx.strokeStyle = "#00ff00"; ctx.lineWidth = 2; ctx.lineJoin = "miter"; ctx.strokeRect(-1, -1, ZW + 2, ZH + 2);
+  ctx.restore();
+  ctx.fillStyle = "#f00"; ctx.fillRect(ZX + 310, 512, 100, 28); ctx.fillStyle = "#ff0"; ctx.fillRect(ZX + 310, 512, 5 * bt.hp, 28);
+  if (bt.dead > 0) { ctx.fillStyle = "rgba(0,0,0,.7)"; ctx.fillRect(0, 0, canvas.width, canvas.height); text("GAME OVER", canvas.width / 2, 230, 64, "#fff", "center"); text("Stay determined...", canvas.width / 2, 320, 22, "#aaa", "center"); }
+}
+// bt intro
+function drawTrans() {
+  drawWorld();
+  ctx.fillStyle = "rgba(0,0,0," + tr / 60 + ")"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const sx = (player.x + SPR_W / 2) * SCALE, sy = (player.y + 14) * SCALE;
+  const ex = ZX + (ZW) / 2, ey = ZY + ZH * 0.65 + HS / 2, p = Math.max(0, (tr - 24) / 26);
+  if (tr >= 24 || (tr >> 3) % 2 === 0) ctx.drawImage(heartImg, sx + (ex - sx) * p - HS / 2, sy + (ey - sy) * p - HS / 2, HS, HS);
+}
+// Pick the right drawing for the current mode
+function draw() {
+  if (mode === "world") drawWorld(); else if (mode === "trans") drawTrans(); else drawBattle();
+}
+// check of ow of bt is
+// =====================
+// 60 fps loop
+// =====================
+// loopt de spel op 60 fps
+let last = performance.now(), acc = 0;
+function loop(n) {
+  acc += Math.min(100, n - last); last = n;
+  while (acc >= 1000 / 60) { update(); acc -= 1000 / 60; }
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
