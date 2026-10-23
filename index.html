@@ -418,7 +418,7 @@ function drawBattle() {
   ctx.strokeStyle = "#00ff00"; ctx.lineWidth = 2; ctx.lineJoin = "miter"; ctx.strokeRect(-1, -1, ZW + 2, ZH + 2);
   ctx.restore();
   ctx.fillStyle = "#f00"; ctx.fillRect(ZX + 310, 512, 100, 28); ctx.fillStyle = "#ff0"; ctx.fillRect(ZX + 310, 512, 5 * bt.hp, 28);
-  if (bt.dead > 0) { ctx.fillStyle = "rgba(0,0,0,.7)"; ctx.fillRect(0, 0, canvas.width, canvas.height); text("DOOD", canvas.width / 2, 230, 64, "#fff", "center"); text("Womp Womp", canvas.width / 2, 320, 22, "#aaa", "center"); }
+  if (bt.dead > 0) { ctx.fillStyle = "rgba(0,0,0,.7)"; ctx.fillRect(0, 0, canvas.width, canvas.height); text("GAME OVER....", canvas.width / 2, 230, 64, "#fff", "center"); text("STAY DETERMINED", canvas.width / 2, 320, 22, "#aaa", "center"); }
 }
 // bt intro
 function drawTrans() {
