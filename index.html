@@ -8,7 +8,6 @@
 /* gebruik de ut font. anders gwn courier new.  */
 @font-face{font-family:undertale;src:local("Determination Mono"),url("font/DTM-Mono.otf")}
 body{margin:0;background:#000;color:#fff;font-family:undertale,"Courier New",monospace}
-/* Scale the canvas to the window, keep pixels crisp, and stop touch-scrolling while playing */
 canvas{display:block;margin:auto;width:min(100vw,1200px);height:auto;image-rendering:pixelated;touch-action:none}
 </style>
 </head>
@@ -17,6 +16,23 @@ canvas{display:block;margin:auto;width:min(100vw,1200px);height:auto;image-rende
 <canvas id="game"></canvas>
 <button id="bt" type="button"></button>
 <script>
+// =====================
+// doos dialoog
+// =====================
+
+const DIALOOG = {
+  up:    ["* Doos 1."],
+  down:  ["* Doos 2."],
+  left:  ["* Doos 3."],
+  right: ["* Doos 4."],
+  front: ["* Doos 5."],
+  back:  ["* Doos 6."],
+  // als je alles inspecteerd. HOEZO??
+  alles: ["* je hebt alles geinspecteerd"]
+};
+// hoe snel de letters verschijnen (hoger = sneller)
+const TYPSNELHEID = 0.6;
+
 // =====================
 // config
 // =====================
@@ -57,7 +73,7 @@ function pt(e) {
   return { x: (e.clientX - r.left) * canvas.width / r.width, y: (e.clientY - r.top) * canvas.height / r.height };
 }
 // muis shit
-canvas.addEventListener("pointerdown", e => ptr = pt(e));
+canvas.addEventListener("pointerdown", e => { const p = pt(e); if (mode === "world" && clickWorld(p)) return; ptr = p; });
 canvas.addEventListener("pointermove", e => { if (ptr) ptr = pt(e); });
 addEventListener("pointerup", () => ptr = null);
 
@@ -99,7 +115,7 @@ btn.onclick = () => { toggle(); btn.blur(); };
 
 // overworld/battle toggle switch
 function toggle() {
-  if (mode === "world") { mode = "trans"; tr = 0; }
+  if (mode === "world") { mode = "trans"; tr = 0; dlg = null; }
   else { mode = "world"; ptr = null; }
   btn.textContent = mode === "world" ? "" : "";
 }
@@ -113,6 +129,7 @@ function setPat(n) { bt.pat = (n + PAT.length) % PAT.length; bt.t = 0; bt.pause 
 // alle knop toggles
 function onPress(k) {
   if (k === "b") toggle();
+  if (mode === "world" && (k === "e" || k === "enter" || k === " ")) act();
   if (mode !== "battle") return;
   if (k >= "1" && k <= "7") { bt.auto = false; setPat(+k - 1); }
   if (k === "n") { bt.auto = false; setPat(bt.pat + 1); }
@@ -120,9 +137,77 @@ function onPress(k) {
 }
 
 // =====================
+// items in de ow
+// =====================
+
+const IS = 24; // grootte item
+const SIDES = [
+  { id: "up",    name: "bovenkant",   x: 188, y: 14,  col: "#4a90e2" },
+  { id: "down",  name: "onderkant",   x: 188, y: 164, col: "#e2a64a" },
+  { id: "left",  name: "linkerkant",  x: 28,  y: 88,  col: "#4ae27a" },
+  { id: "right", name: "rechterkant", x: 348, y: 88,  col: "#e24a8a" },
+  { id: "back",  name: "achterkant",  x: 290, y: 36,  col: "#9a4ae2" },
+  { id: "front", name: "voorkant",    x: 86,  y: 140, col: "#e2e24a" }
+];
+const ITEMS = SIDES.map(s => ({ ...s, src: "box/" + s.id + ".png", img: load("box/" + s.id + ".png"), pop: 0 }));
+const seen = new Set();
+let dlg = null;
+
+// hitbox systeem voor de dozen
+const feetBox = (x = player.x, y = player.y) => ({ x: x + 2, y: y + 20, w: SPR_W - 4, h: SPR_H - 20 });
+const itemBox = it => ({ x: it.x, y: it.y, w: IS, h: IS });
+const overlap = (a, b, m = 0) => a.x < b.x + b.w + m && a.x + a.w > b.x - m && a.y < b.y + b.h + m && a.y + a.h > b.y - m;
+const blocked = (x, y) => ITEMS.some(it => overlap(feetBox(x, y), itemBox(it)));
+// kan kris die item aanraken?
+const reachable = it => overlap(feetBox(), itemBox(it), 8);
+// checkt item verte
+function nearItem() {
+  let best = null, bd = 1e9;
+  const f = feetBox();
+  for (const it of ITEMS) {
+    if (!reachable(it)) continue;
+    const d = Math.hypot(it.x + IS / 2 - (f.x + f.w / 2), it.y + IS / 2 - (f.y + f.h / 2));
+    if (d < bd) { bd = d; best = it; }
+  }
+  return best;
+}
+// item inspecteren
+function openItem(it) {
+  it.pop = 30; ptr = null;
+  const f = feetBox(), vx = it.x + IS / 2 - (f.x + f.w / 2), vy = it.y + IS / 2 - (f.y + f.h / 2);
+  player.dir = Math.abs(vx) > Math.abs(vy) ? (vx < 0 ? "left" : "right") : (vy < 0 ? "up" : "down");
+  player.frame = 0;
+  const fill = t => String(t).replaceAll("{naam}", it.name).replaceAll("{pad}", it.src);
+  const lines = (DIALOOG[it.id] || ["* ..."]).map(fill);
+  seen.add(it.id);
+  if (seen.size === ITEMS.length && !seen.done) { seen.done = true; lines.push(...(DIALOOG.alles || []).map(fill)); }
+  if (!lines.length) lines.push("* ...");
+  dlg = { lines, i: 0, c: 0, top: player.y + SPR_H / 2 > BASE_H / 2 };
+}
+// enter om de dialoog te skippen
+function act() {
+  if (dlg) {
+    if (dlg.c < dlg.lines[dlg.i].length) dlg.c = dlg.lines[dlg.i].length;
+    else if (++dlg.i >= dlg.lines.length) dlg = null;
+    else dlg.c = 0;
+    return;
+  }
+  const it = nearItem();
+  if (it) openItem(it);
+}
+// item shit
+function clickWorld(p) {
+  if (dlg) { act(); return true; }
+  const x = p.x / SCALE, y = p.y / SCALE;
+  const it = ITEMS.find(i => x >= i.x && x <= i.x + IS && y >= i.y && y <= i.y + IS);
+  if (it && reachable(it)) { openItem(it); return true; }
+  return false;
+}
+
+// =====================
 // bullet patterns 
 // =====================
-// rnd tussen a em b
+// rnd tussen a en b
 const rnd = (a, b) => a + Math.random() * (b - a);
 const orb = (x, y, vx, vy, r = 7) => bt.bul.push({ k: 0, x, y, vx, vy, r });
 const rect = (x, y, w, h, vx, vy) => bt.bul.push({ k: 1, x, y, w, h, vx, vy });
@@ -189,10 +274,19 @@ function hit(b, cx, cy) {
 // =====================
 // logica ow
 function updateWorld() {
+  for (const it of ITEMS) if (it.pop > 0) it.pop--;
+  // tijdens dialoog staat kris stil
+  if (dlg) {
+    player.moving = false; player.frame = 0;
+    dlg.c = Math.min(dlg.lines[dlg.i].length, dlg.c + TYPSNELHEID);
+    return;
+  }
   const [dx, dy] = vec((player.x + SPR_W / 2) * SCALE, (player.y + SPR_H / 2) * SCALE);
   player.moving = !!(dx || dy);
-  player.x = clamp(player.x + dx * player.speed, 0, BASE_W - SPR_W);
-  player.y = clamp(player.y + dy * player.speed, 0, BASE_H - SPR_H);
+  const nx = clamp(player.x + dx * player.speed, 0, BASE_W - SPR_W);
+  if (!blocked(nx, player.y)) player.x = nx;
+  const ny = clamp(player.y + dy * player.speed, 0, BASE_H - SPR_H);
+  if (!blocked(player.x, ny)) player.y = ny;
   if (dy > 0) player.dir = "down";
   if (dy < 0) player.dir = "up";
   if (dx < 0) player.dir = "left";
@@ -256,13 +350,46 @@ function drawKris() {
 function drawWorld() {
   ctx.fillStyle = "#111"; ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.imageSmoothingEnabled = false;
+  const near = dlg ? null : nearItem(), feet = player.y + SPR_H;
+  for (const it of ITEMS) if (it.y + IS <= feet) drawItem(it, near);
   drawKris();
+  for (const it of ITEMS) if (it.y + IS > feet) drawItem(it, near);
   text("", 12, canvas.height - 28, 18, "#666");
+  if (dlg) drawDialog();
 }
-// blauwe kogels
+// teken de items in de ow
+function drawItem(it, near) {
+  const w = IS * SCALE, x = it.x * SCALE, y = it.y * SCALE - Math.abs(Math.sin(it.pop / 30 * Math.PI)) * 14;
+  if (it.img.complete && it.img.naturalWidth) ctx.drawImage(it.img, x, y, w, w);
+  else {
+    ctx.fillStyle = it.col; ctx.fillRect(x, y, w, w);
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 3; ctx.strokeRect(x + 1.5, y + 1.5, w - 3, w - 3);
+    text(it.id, x + w / 2, y + w / 2 - 8, 16, "#000", "center");
+  }
+  if (it === near) {
+    ctx.strokeStyle = "#ff0"; ctx.lineWidth = 3; ctx.strokeRect(x - 4, y - 4, w + 8, w + 8);
+    const b = Math.sin(fr / 8) * 4;
+    ctx.fillStyle = "#ff0"; ctx.beginPath(); ctx.moveTo(x + w / 2 - 9, y - 24 + b); ctx.lineTo(x + w / 2 + 9, y - 24 + b); ctx.lineTo(x + w / 2, y - 10 + b); ctx.fill();
+  }
+}
+// ut dialoog doos
+function drawDialog() {
+  const bw = canvas.width - 72, bh = 150, bx = 36, by = dlg.top ? 24 : canvas.height - bh - 24;
+  ctx.fillStyle = "#000"; ctx.fillRect(bx, by, bw, bh);
+  ctx.strokeStyle = "#fff"; ctx.lineWidth = 6; ctx.strokeRect(bx + 3, by + 3, bw - 6, bh - 6);
+  const L = dlg.lines[dlg.i];
+  text(L.slice(0, dlg.c | 0), bx + 32, by + 36, 34, "#fff");
+  if (dlg.c >= L.length && (fr >> 4) % 2 === 0) {
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.moveTo(bx + bw - 60, by + bh - 52); ctx.lineTo(bx + bw - 36, by + bh - 52); ctx.lineTo(bx + bw - 48, by + bh - 34); ctx.fill();
+  }
+}
+// kogels
+const img = new Image();
+img.src = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR2eKATPvhAnn2jKq_17zCdK8ai_Fwun9sK20yGXeqing&s=10"; 
+
 function drawSquare(x, y, s) {
-  ctx.fillStyle = "#ffffff"; ctx.fillRect(x - s, y - s, s * 2, s * 2);
-  ctx.fillStyle = "#ffffff"; ctx.fillRect(x - s * .45, y - s * .45, s * .9, s * .9);
+  if (!img.complete) return;
+  ctx.drawImage(img, x - s, y - s, s * 2, s * 2);
 }
 // teken alle kogels
 function drawBullets() {
@@ -291,7 +418,7 @@ function drawBattle() {
   ctx.strokeStyle = "#00ff00"; ctx.lineWidth = 2; ctx.lineJoin = "miter"; ctx.strokeRect(-1, -1, ZW + 2, ZH + 2);
   ctx.restore();
   ctx.fillStyle = "#f00"; ctx.fillRect(ZX + 310, 512, 100, 28); ctx.fillStyle = "#ff0"; ctx.fillRect(ZX + 310, 512, 5 * bt.hp, 28);
-  if (bt.dead > 0) { ctx.fillStyle = "rgba(0,0,0,.7)"; ctx.fillRect(0, 0, canvas.width, canvas.height); text("GAME OVER", canvas.width / 2, 230, 64, "#fff", "center"); text("Stay determined...", canvas.width / 2, 320, 22, "#aaa", "center"); }
+  if (bt.dead > 0) { ctx.fillStyle = "rgba(0,0,0,.7)"; ctx.fillRect(0, 0, canvas.width, canvas.height); text("DOOD", canvas.width / 2, 230, 64, "#fff", "center"); text("Womp Womp", canvas.width / 2, 320, 22, "#aaa", "center"); }
 }
 // bt intro
 function drawTrans() {
